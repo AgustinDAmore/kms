@@ -1,0 +1,64 @@
+
+AVISO: Solo funciona para windows!
+
+📌 Introducción
+¡Hola! 👋 La idea de este proyecto es crear una APP básica, sencilla y liviana con herramientas diseñadas para solucionar los inconvenientes que nos encontramos en el día a día los especialistas TICs.
+
+Esta aplicación busca ser una herramienta práctica, de fácil uso y accesible, que ayude a agilizar tareas comunes, resolver problemas frecuentes y optimizar el flujo de trabajo en el ámbito de la tecnología.
+
+🚀 Características principales
+✔️ Liviana y rápida: Pensada para ejecutarse sin consumir muchos recursos.
+
+✔️ Interfaz intuitiva: Fácil de usar, sin complicaciones.
+
+✔️ Herramientas útiles: Funcionalidades pensadas para resolver problemas cotidianos de los técnicos.
+
+✔️ Open Source: Colabora, mejora y personaliza según tus necesidades.
+
+🛠️ Tecnologías utilizadas
+Python (versión 3.13)
+
+📥 Pruebas
+Clona el repositorio:
+
+CMD
+git clone https://github.com/AgustinDAmore/kms.git
+Instala las dependencias:
+
+CMD
+pip install -r requirements.txt  
+luego debe crear un archivo py llamado keys.py
+DEntro de dicho archivo debe estar estructurado de la siguiente manera
+'''
+def obtenerKeys():
+    return {
+        # Windows 10/11 Keys
+        "Core": "xxxx-xxxx-xxxx-xxxx-xxxx",
+        "CoreN": "xxxx-xxxx-xxxx-xxxx-xxxx",
+        "CoreSingleLanguage": "xxxx-xxxx-xxxx-xxxx-xxxx",
+'''
+donde la key es la edicion del Sistema Windows y el Value es la clave de dicho sistema.
+para saber bien todas las ediciones que estan en el codigo activador_kms recomiendo ver 
+la funciona 'def detect_windows_edition():' donde el Value son las ediciones.
+
+en caso de querer el keys.py completo o el .exe de la aplicación solicitarlo a adamore@damotec.ar
+
+Ejecuta la aplicación:
+
+CMD Como Administrador
+python activador_kms.py
+
+🤝 Contribuciones
+¡Las contribuciones son bienvenidas! Si tienes ideas para mejorar la app o quieres reportar un bug, abre un issue o envía un pull request.
+
+📜 Licencia
+Este proyecto está bajo la licencia MIT, lo que significa que puedes usarlo, modificarlo y distribuirlo libremente.
+MIT License  
+
+Copyright (c) [2025] [AgustinDAmore]  
+
+Permiso concedido, de forma gratuita, a cualquier persona que obtenga una copia  
+de este software y los archivos de documentación asociados (el "Software"), para  
+tratar el Software sin restricción, incluyendo sin limitación los derechos  
+de uso, copia, modificación, fusión, publicación, distribución, sublicencia  
+y/o venta de copias del Software...  

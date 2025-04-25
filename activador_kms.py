@@ -11,7 +11,7 @@ import time
 import re
 import winreg
 import platform
-import wmi
+import wmi # pip install wmi
 import psutil
 import getpass
 ####################################
@@ -122,6 +122,7 @@ def get_windows_info():
 def configurar_servidores_kms_publicos():
     return [
         "kms8.msguides.com",
+        "10.3.0.20:1688",
         "kms.digiboy.ir",
         "kms.srv.crsoo.com",
         "kms.loli.beer",
@@ -785,7 +786,7 @@ class WindowsActivator:
         # 5. Generar recomendaciones basadas en los hallazgos
         self._generate_recommendations(diagnosis)
         
-        print("\n[📋] Resumen del diagnóstico:")
+        print("\nResumen del diagnóstico:")
         print(f"- Problemas detectados: {len(diagnosis['detected_issues'])}")
         print(f"- Recomendaciones: {len(diagnosis['recommendations'])}")
         
@@ -864,10 +865,9 @@ class WindowsActivator:
         # Recomendación general
         diagnosis['recommendations'].append("Si los problemas persisten, pruebe reiniciando el servicio de licencias: 'net stop sppsvc && net start sppsvc'")
 ################################################################################################################################################################
-    @staticmethod
-    def uninstall_product_key() -> bool:
+    def uninstall_product_key(self) -> bool:
         """
-        Uninstalls the current Windows product key
+        Uninstalls the current Windows product key using multiple fallback methods
         
         Returns:
             bool: True if uninstallation was successful, False otherwise
@@ -880,25 +880,42 @@ class WindowsActivator:
         ]
         
         for method in methods:
-            success, output = WindowsActivator.run_command(method)
+            success, output = self.run_command(method)
             if success:
-                print("[+] Product key uninstalled successfully")
+                print(f"[+] Product key uninstalled successfully using {method.split()[0]}")
                 return True
             print(f"[!] Failed to uninstall key with {method.split()[0]}: {output}")
         
         return False
-################################################################################################################################################################
-    def reset_activation_status(self) -> bool:
+
+    def clear_kms_server(self) -> bool:
         """
-        Completely resets Windows activation status
-        - Uninstalls product key
-        - Clears KMS server settings
-        - Resets licensing status
+        Clears configured KMS server settings
         
         Returns:
-            bool: True if all operations were successful
+            bool: True if KMS settings were cleared successfully, False otherwise
         """
-        print("\n[+] Resetting Windows activation...")
+        clear_kms = 'cscript //nologo "%windir%\\system32\\slmgr.vbs" /ckms'
+        success, output = self.run_command(clear_kms)
+        
+        if not success:
+            print(f"[!] Failed to clear KMS server settings: {output}")
+            return False
+        
+        print("[+] KMS server settings cleared successfully")
+        return True
+            
+    def reset_activation_status(self) -> bool:
+        """
+        Completely resets Windows activation status without requiring reboot
+        - Uninstalls product key
+        - Clears KMS server settings
+        - Attempts reactivation (/ato instead of /rearm)
+        
+        Returns:
+            bool: True if all operations were successful, False otherwise
+        """
+        print("\n[+] Resetting Windows activation (without reboot)...")
         
         # 1. Uninstall current product key
         if not self.uninstall_product_key():
@@ -906,25 +923,23 @@ class WindowsActivator:
             return False
         
         # 2. Clear KMS server settings
-        clear_kms = 'cscript //nologo "%windir%\\system32\\slmgr.vbs" /ckms'
-        success, output = self.run_command(clear_kms)
-        if not success:
+        if not self.clear_kms_server():
             print("[!] Failed to clear KMS server settings")
             return False
         
-        # 3. Reset licensing status
-        rearm = 'cscript //nologo "%windir%\\system32\\slmgr.vbs" /rearm'
-        success, output = self.run_command(rearm)
+        # 3. Attempt reactivation instead of rearm
+        reactivate = 'cscript //nologo "%windir%\\system32\\slmgr.vbs" /ato'
+        success, output = self.run_command(reactivate)
+        
         if not success:
-            print("[!] Failed to reset licensing status")
+            print(f"[!] Failed to attempt reactivation: {output}")
             return False
         
-        print("[+] Windows activation has been completely reset")
-        print("    Note: A system reboot may be required for changes to take effect")
+        print("[+] Windows activation has been reset (no reboot performed)")
+        print("    Note: Some features might require reboot to work properly")
         return True
-    
-    @staticmethod
 ################################################################################################################################################################
+    @staticmethod
     def run_command(command: str):
         """Ejecuta un comando y devuelve el resultado"""
         try:
@@ -1025,76 +1040,69 @@ class WindowsActivator:
         print("[+] Configuración del servidor KMS verificada.")
         return True
 ################################################################################################################################################################
-    def full_activation(self, max_retries: int = 3) -> bool:
+    def full_activation(self,intento: int = 0,cat_servers_kms: int = len(configurar_servidores_kms_publicos()), max_retries: int = 3) -> bool:
+        def activacion():
+            # Paso 4: Configurar KMS 
+            if intento != cat_servers_kms:
+                kms_servers = configurar_servidores_kms_publicos()  # Función externa
+                for numServer in range(cat_servers_kms):
+                    print(f"\n[+] Probando servidor KMS: {kms_servers[intento]}")
+                    if self.configure_kms_server(kms_servers[intento]):  # Método de instancia
+                        # Paso 5: Activar Windows (con reintentos)
+                        self.activate_windows(max_retries=1)
+                        # Paso 6: Verificar activación
+                        print("\n[+] Verificando activación...")
+                        if not self.verify_activation():  # Método de instancia
+                            print("[!] La activación no fue exitosa según la verificación")
+                            self.clear_kms_server()
+                            self.full_activation(intento+1)
+                        
+                        print("\n[+] Windows activado exitosamente!")
+                        return True
+                        
+            else:
+                print("[!] Todos los servidores KMS fallaron")
+                return False
+            
         """Proceso completo de activación con reintentos y verificación"""
         print("\n[+] Iniciando proceso de activación...")
-        
-        # Paso 1: Detectar edición
-        edition = self.detect_windows_edition()  # Esto es un método de instancia
-        if not edition:
-            print("[!] No se pudo detectar la edición de Windows")
-            return False
-        
-        print(f"[+] Edición detectada: {edition}")
-        
-        # Paso 2: Obtener clave GVLK correcta
-        gvlk_key = self.GVLK_KEYS.get(edition)  # Acceso a atributo de instancia
-        if not gvlk_key:
-            print(f"[!] No hay clave GVLK para la edición {edition}")
-            return False
-        
-        print(f"[+] Usando clave GVLK: {gvlk_key}")
-        
-        # Paso 3: Instalar clave (con reintentos)
-        for attempt in range(1, max_retries + 1):
-            print(f"\n[+] Intento {attempt} de {max_retries} para instalar clave...")
-            if self.install_product_key(gvlk_key):  # Método de instancia
-                break
-            if attempt == max_retries:
-                print("[!] Falló la instalación de la clave después de varios intentos")
+        if intento == 0:
+            # Paso 1: Detectar edición
+            edition = self.detect_windows_edition()  # Esto es un método de instancia
+            if not edition:
+                print("[!] No se pudo detectar la edición de Windows")
                 return False
-        
-        # Paso 4: Configurar KMS (con múltiples servidores de respaldo)
-        kms_servers = configurar_servidores_kms_publicos()  # Función externa
-        for server in kms_servers:
-            print(f"\n[+] Probando servidor KMS: {server}")
-            if self.configure_kms_server(server):  # Método de instancia
-                break
+            
+            print(f"[+] Edición detectada: {edition}")
+            
+            # Paso 2: Obtener clave GVLK correcta
+            gvlk_key = self.GVLK_KEYS.get(edition)  # Acceso a atributo de instancia
+            if not gvlk_key:
+                print(f"[!] No hay clave GVLK para la edición {edition}")
+                return False
+            
+            print(f"[+] Usando clave GVLK: {gvlk_key}")
+            
+            # Paso 3: Instalar clave (con reintentos)
+            for attempt in range(1, max_retries + 1):
+                print(f"\n[+] Intento {attempt} de {max_retries} para instalar clave...")
+                if self.install_product_key(gvlk_key):  # Método de instancia
+                    print(f"[+] Clave GVLK instalada e forma correcta: {gvlk_key}")
+                    break
+                if attempt == max_retries:
+                    print("[!] Falló la instalación de la clave después de varios intentos")
+                    return False
+            
+            return activacion()
         else:
-            print("[!] Todos los servidores KMS fallaron")
-            return False
-        
-        # Paso 5: Activar Windows (con reintentos)
-        for attempt in range(1, max_retries + 1):
-            print(f"\n[+] Intento {attempt} de {max_retries} para activar...")
-            if self.activate_windows(max_retries=3, kms_servers=kms_servers):  # Corregido parámetro
-                break
-            if attempt == max_retries:
-                print("[!] Falló la activación después de varios intentos")
-                return False
-        
-        # Paso 6: Verificar activación
-        print("\n[+] Verificando activación...")
-        if not self.verify_activation():  # Método de instancia
-            print("[!] La activación no fue exitosa según la verificación")
-            return False
-        
-        print("\n[+] Windows activado exitosamente!")
-        return True
+            return activacion()
+
 ################################################################################################################################################################
     @staticmethod
-    def activate_windows(max_retries: int = 3, kms_servers: list = None) -> bool:
-        """Intenta activar Windows con manejo mejorado de errores y múltiples servidores KMS.
-        
-        Args:
-            max_retries: Número máximo de intentos de activación
-            kms_servers: Lista de servidores KMS alternativos (opcional)
-        
-        Returns:
+    def activate_windows(max_retries: int = 3) -> bool:
+        """Intenta activar Windows.
             bool: True si la activación fue exitosa, False en caso contrario
         """
-        kms_servers = kms_servers
-        current_server_index = 0
         windir = os.environ.get("windir")
         slmgr_path = os.path.join(windir, "system32", "slmgr.vbs") if windir else None
         
@@ -1120,12 +1128,6 @@ class WindowsActivator:
                 print("[*] Información de licencia:")
                 WindowsActivator.run_command(f'cscript //nologo "{slmgr_path}" /dli')
                 return True
-            
-            # Manejo de errores específicos
-            elif "0xC004F074" in output:
-                print(f"[!] Error: No se pudo contactar el servidor KMS (Intentando con servidor alternativo)")
-                WindowsActivator.configure_kms_server(kms_servers[current_server_index % len(kms_servers)])
-                current_server_index += 1
                 
             elif "0xC004C003" in output:
                 print("[!] Error: Clave de producto no válida o bloqueada")
@@ -1143,12 +1145,7 @@ class WindowsActivator:
                 return False
                 
             else:
-                print(f"[!] Error desconocido durante la activación. Código: {output}")
-                
-            # Espera progresiva entre intentos (backoff)
-            wait_time = min(attempt * 5, 30)  # Máximo 30 segundos de espera
-            print(f"[*] Esperando {wait_time} segundos antes de reintentar...")
-            time.sleep(wait_time)
+                print(f"[!] Error desconocido durante la activación.")
                 
         print(f"\n[!] Falló la activación después de {max_retries} intentos")
         return False
@@ -1499,7 +1496,7 @@ def main():
 === Herramientas y Activador KMS Avanzado ===
 ===      Creado por Agustin D'Amore       ===
 =============================================
-===   Version de la aplicacion 1.2.0.0    ===
+===   Version de la aplicacion 1.2.0.1    ===
 =============================================
 primer numero <- Mayor Cambios incompatibles con versiones anteriores.
 segundo numero <- Menor Nuevas funcionalidades compatibles.
