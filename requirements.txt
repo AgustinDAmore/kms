@@ -1,1 +1,2 @@
 pip install wmi
+pip install psutil

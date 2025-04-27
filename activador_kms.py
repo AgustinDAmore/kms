@@ -12,7 +12,7 @@ import re
 import winreg
 import platform
 import wmi # pip install wmi
-import psutil
+import psutil # pip install psutil
 import getpass
 ####################################
 import keys
@@ -1040,66 +1040,72 @@ class WindowsActivator:
         print("[+] Configuración del servidor KMS verificada.")
         return True
 ################################################################################################################################################################
-    def full_activation(self,intento: int = 0,cat_servers_kms: int = len(configurar_servidores_kms_publicos()), max_retries: int = 3) -> bool:
-        def activacion():
+    def full_activation(self) -> bool:
+        def intalacionDeClave(edition):
+            gvlk_key = self.GVLK_KEYS.get(edition)  # Acceso a atributo de instancia
+            if not gvlk_key:
+                print(f"[!] No hay clave GVLK para la edición {edition}")
+                return False
+            if type(gvlk_key) == list:
+                for key in gvlk_key:
+                    print(f"[+] Usando clave GVLK: {key}")
+                    
+                    if self.install_product_key(key):  # Método de instancia
+                        print(f"[+] Clave GVLK instalada e forma correcta: {key}")
+                        activacion(0)
+                else:
+                    print("[!] Falló la instalación de las claves disponibles")
+                    return False
+                
+            else:
+                print(f"[+] Usando clave GVLK: {gvlk_key}")
+                    
+                if self.install_product_key(gvlk_key):  # Método de instancia
+                    print(f"[+] Clave GVLK instalada e forma correcta: {gvlk_key}")
+                    return activacion(0)
+                else:
+                    print("[!] Falló la instalación de la clave")
+                    return False
+            
+        def activacion(intento):
             # Paso 4: Configurar KMS 
-            if intento != cat_servers_kms:
+            if intento != len(configurar_servidores_kms_publicos()):
                 kms_servers = configurar_servidores_kms_publicos()  # Función externa
-                for numServer in range(cat_servers_kms):
-                    print(f"\n[+] Probando servidor KMS: {kms_servers[intento]}")
-                    if self.configure_kms_server(kms_servers[intento]):  # Método de instancia
+                for numServer in range(intento,len(configurar_servidores_kms_publicos())):
+                    print(f"\n[+] Probando servidor KMS: {kms_servers[numServer]}")
+                    if self.configure_kms_server(kms_servers[numServer]):  # Método de instancia
                         # Paso 5: Activar Windows (con reintentos)
-                        self.activate_windows(max_retries=1)
-                        # Paso 6: Verificar activación
                         print("\n[+] Verificando activación...")
-                        if not self.verify_activation():  # Método de instancia
+                        if not self.activate_windows():  # Método de instancia
                             print("[!] La activación no fue exitosa según la verificación")
                             self.clear_kms_server()
-                            self.full_activation(intento+1)
+                            return activacion(intento+1)
                         
                         print("\n[+] Windows activado exitosamente!")
+                        # Paso 6: Verificar activación
+                        self.verify_activation()
                         return True
-                        
+                
             else:
                 print("[!] Todos los servidores KMS fallaron")
                 return False
             
         """Proceso completo de activación con reintentos y verificación"""
         print("\n[+] Iniciando proceso de activación...")
-        if intento == 0:
-            # Paso 1: Detectar edición
-            edition = self.detect_windows_edition()  # Esto es un método de instancia
-            if not edition:
-                print("[!] No se pudo detectar la edición de Windows")
-                return False
+        # Paso 1: Detectar edición
+        edition = self.detect_windows_edition()  # Esto es un método de instancia
+        if not edition:
+            print("[!] No se pudo detectar la edición de Windows")
+            return False
             
-            print(f"[+] Edición detectada: {edition}")
+        print(f"[+] Edición detectada: {edition}")
             
-            # Paso 2: Obtener clave GVLK correcta
-            gvlk_key = self.GVLK_KEYS.get(edition)  # Acceso a atributo de instancia
-            if not gvlk_key:
-                print(f"[!] No hay clave GVLK para la edición {edition}")
-                return False
-            
-            print(f"[+] Usando clave GVLK: {gvlk_key}")
-            
-            # Paso 3: Instalar clave (con reintentos)
-            for attempt in range(1, max_retries + 1):
-                print(f"\n[+] Intento {attempt} de {max_retries} para instalar clave...")
-                if self.install_product_key(gvlk_key):  # Método de instancia
-                    print(f"[+] Clave GVLK instalada e forma correcta: {gvlk_key}")
-                    break
-                if attempt == max_retries:
-                    print("[!] Falló la instalación de la clave después de varios intentos")
-                    return False
-            
-            return activacion()
-        else:
-            return activacion()
+        # Paso 2: Obtener clave GVLK correcta
+        return intalacionDeClave(edition)
 
 ################################################################################################################################################################
     @staticmethod
-    def activate_windows(max_retries: int = 3) -> bool:
+    def activate_windows() -> bool:
         """Intenta activar Windows.
             bool: True si la activación fue exitosa, False en caso contrario
         """
@@ -1113,41 +1119,36 @@ class WindowsActivator:
             return False
 
         # Ciclo de intentos de activación
-        for attempt in range(1, max_retries + 1):
-            print(f"\n[+] Intento de activación {attempt}/{max_retries}")
+        print(f"\n[+] Intento de activación")
             
-            # Comando de activación estándar
-            command = f'cscript //nologo "{slmgr_path}" /ato'
-            success, output = WindowsActivator.run_command(command)
+        # Comando de activación estándar
+        command = f'cscript //nologo "{slmgr_path}" /ato'
+        success, output = WindowsActivator.run_command(command)
             
-            # Análisis de resultados
-            output_lower = output.lower()
+        # Análisis de resultados
+        output_lower = output.lower()
             
-            if success and ("correctamente") in output_lower:
-                print("[+] Activación exitosa!")
-                print("[*] Información de licencia:")
-                WindowsActivator.run_command(f'cscript //nologo "{slmgr_path}" /dli')
-                return True
+        if success and ("correctamente") in output_lower:
+            print("[+] Activación exitosa!")
+            print("[*] Información de licencia:")
+            WindowsActivator.run_command(f'cscript //nologo "{slmgr_path}" /dli')
+            return True
+        elif "0xC004C003" in output:
+            print("[!] Error: Clave de producto no válida o bloqueada")
+            print("[*] Solución: Verificar la clave GVLK para tu versión de Windows")
+            return False
+        elif "0xC004F038" in output:
+            print("[!] Error: Límite de activaciones excedido")
+            print("[*] Solución: Esperar 24 horas o usar otro servidor KMS")
+            return False
+        elif "0xC004F041" in output:
+            print("[!] Error: La máquina no está cualificada para activación KMS")
+            print("[*] Solución: Verificar que estás usando una versión Volume License")
+            return False
+        else:
+            print(f"[!] Error desconocido durante la activación.")
                 
-            elif "0xC004C003" in output:
-                print("[!] Error: Clave de producto no válida o bloqueada")
-                print("[*] Solución: Verificar la clave GVLK para tu versión de Windows")
-                return False
-                
-            elif "0xC004F038" in output:
-                print("[!] Error: Límite de activaciones excedido")
-                print("[*] Solución: Esperar 24 horas o usar otro servidor KMS")
-                return False
-                
-            elif "0xC004F041" in output:
-                print("[!] Error: La máquina no está cualificada para activación KMS")
-                print("[*] Solución: Verificar que estás usando una versión Volume License")
-                return False
-                
-            else:
-                print(f"[!] Error desconocido durante la activación.")
-                
-        print(f"\n[!] Falló la activación después de {max_retries} intentos")
+        print(f"\n[!] Falló la activación ")
         return False
 ################################################################################################################################################################
     @staticmethod
