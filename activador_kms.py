@@ -1,20 +1,13 @@
 import os
 import ctypes
 import subprocess
-import urllib.request
-import tarfile
-import sys
-import shutil
 import datetime
 import socket
-import ssl
-import time
 import re
 import winreg
-import requests
 import platform
-import wmi # pip install wmi
-import psutil # pip install psutil
+import wmi
+import psutil
 import getpass
 ####################################
 import keys
