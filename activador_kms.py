@@ -3,6 +3,7 @@ import ctypes
 import subprocess
 import urllib.request
 import tarfile
+import sys
 import shutil
 import datetime
 import socket
@@ -10,6 +11,7 @@ import ssl
 import time
 import re
 import winreg
+import requests
 import platform
 import wmi # pip install wmi
 import psutil # pip install psutil
@@ -158,126 +160,7 @@ def run_command(command):
         return "Error: Tiempo de espera agotado"
     except Exception as e:
         return f"Excepción: {str(e)}"
-
-def remove_vlmcsd():
-    """Elimina el ejecutable vlmcsd.exe y archivos relacionados"""
-    print("\nLimpiando archivos de vlmcsd...")
-    run_command("net stop vlmcsd")
-    run_command("net stop sppsvc")
-
-    files_to_remove = [
-        "vlmcsd.exe",
-        "binaries.tar.gz",
-        "binaries"
-    ]
-    
-    removed = False
-    for file in files_to_remove:
-        try:
-            if os.path.exists(file):
-                if os.path.isdir(file):
-                    shutil.rmtree(file)
-                else:
-                    os.remove(file)
-                print(f"Eliminado: {file}")
-                removed = True
-        except Exception as e:
-            print(f"Error al eliminar {file}: {str(e)}")
-    
-    if not removed:
-        print("No se encontraron archivos para eliminar")
-    input("\nPresione Enter para continuar...")
 ################################################################################################################################################################
-def download_vlmcsd():
-    if os.path.exists("vlmcsd.exe"):
-        return True
-        
-    print("\nDescargando componente necesario...")
-    mirrors = [
-        "https://github.com/Wind4/vlmcsd/releases/download/svn1113/binaries.tar.gz",
-        "https://kms.cangshui.net/vlmcsd/binaries.tar.gz",
-        "https://web.archive.org/web/2023/https://github.com/Wind4/vlmcsd/releases/download/svn1112/binaries.tar.gz"
-    ]
-    
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    for i, url in enumerate(mirrors, 1):
-        try:
-            print(f"Intento {i}/{len(mirrors)} desde {url.split('/')[2]}...")
-            
-            req = urllib.request.Request(url, headers=headers)
-            
-            for attempt in range(3):
-                try:
-                    with urllib.request.urlopen(req, context=ssl_context, timeout=10) as response:
-                        with open("binaries.tar.gz", 'wb') as out_file:
-                            shutil.copyfileobj(response, out_file)
-                    break
-                except Exception as e:
-                    if attempt == 2:
-                        raise
-                    time.sleep(2)
-                    continue
-            
-            # Extraer archivo
-            with tarfile.open("binaries.tar.gz", "r:gz") as tar:
-                # Buscar el ejecutable en la estructura del tar
-                for member in tar.getmembers():
-                    if member.name.endswith('vlmcsd-Windows-x64.exe'):
-                        tar.extract(member)
-                        extracted_path = member.name
-                        break
-                
-            # Mover y limpiar
-            os.rename(extracted_path, "vlmcsd.exe")
-            shutil.rmtree("binaries", ignore_errors=True)
-            os.remove("binaries.tar.gz")
-            
-            print("Descarga completada")
-            return True
-            
-        except Exception as e:
-            print(f"Error: {str(e)}")
-            # Limpiar archivos temporales si falló
-            if os.path.exists("binaries.tar.gz"):
-                os.remove("binaries.tar.gz")
-            continue
-            
-    print("Todos los mirrors fallaron")
-    return False
-################################################################################################################################################################
-def start_kms_server_local():
-    if not download_vlmcsd():
-        return None
-        
-    try:
-        # Verificar si el puerto está disponible
-        test = subprocess.Popen(
-            ["vlmcsd.exe", "-e", "-L", "0.0.0.0", "-p", "1688", "-t", "2"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
-        time.sleep(3)
-        
-        if test.poll() is None:
-            print("Servidor KMS local iniciado")
-            return test
-            
-        # Leer el error si existe
-        error_output = test.stderr.read().decode('cp850', errors='ignore') if test.stderr else 'Desconocido'
-        print(f"Error al iniciar: {error_output}")
-        return None
-        
-    except Exception as e:
-        print(f"Excepción al iniciar: {str(e)}")
-        return None
 ##########
 # Office #
 ##########
@@ -292,228 +175,64 @@ cscript ospp.vbs /inpkey:NMMKJ-6RK4F-KMJVX-8D9MJ-6MWKP
 cscript ospp.vbs /sethst:kms8.msguides.com
 cscript ospp.vbs /act
 """
-
-def clean_office_previous_claves():
-    """Elimina claves de producto existentes de Office"""
-    print("\nLimpiando claves anteriores de Office...")
-    
-    # Try different Office installation paths
-    paths = [
-        r"%ProgramFiles(x86)%\Microsoft Office\Office16",
-        r"%ProgramFiles%\Microsoft Office\Office16",
-        r"%ProgramFiles(x64)%\Microsoft Office\Office16"
-    ]
-    
-    office_path_found = False
-    for path in paths:
-        try:
-            os.chdir(os.path.expandvars(path))
-            office_path_found = True
-            break
-        except FileNotFoundError:
-            continue
-    
-    if not office_path_found:
-        print("Error: No se pudo encontrar la instalación de Office")
-        return False
-
-    commands = [
-        'cscript ospp.vbs /unpkey:6MWKP',  # Eliminar clave especifica
-        'cscript ospp.vbs /remhst',        # Eliminar informacion de la conexion KMS
-        'cscript ospp.vbs /dstatus'        # Mirar estado final de la activacion
-    ]
-    
-    for cmd in commands:
-        result = run_command(cmd)
-        print(result if result else "Comando ejecutado (sin mensaje)")
-    
-    print("\nLimpieza de claves de Office completada.")
-    return True
-################################################################################################################################################################
-def activate_office_with_local_kms():
-    """Proceso completo de activación local de Office con KMS local"""
-    print("\nConfigurando servidor KMS local para Office...")
-
-    # Try different Office installation paths
-    paths = [
-        r"%ProgramFiles(x86)%\Microsoft Office\Office16",
-        r"%ProgramFiles%\Microsoft Office\Office16",
-        r"%ProgramFiles(x64)%\Microsoft Office\Office16"
-    ]
-    
-    office_path_found = False
-    for path in paths:
-        try:
-            os.chdir(os.path.expandvars(path))
-            office_path_found = True
-            break
-        except FileNotFoundError:
-            continue
-    
-    if not office_path_found:
-        print("Error: No se pudo encontrar la instalación de Office")
-        input("\nPresione Enter para continuar...")
-        return False
-
-    # Install license files
-    print("\nInstalando licencias...")
-    result = run_command('for /f %x in (\'dir /b ..\\root\\Licenses16\\ProPlus2019VL*.xrm-ms\') do cscript ospp.vbs /inslic:"..\\root\\Licenses16\\%x"')
-    if "Error" in result:
-        print(f"\nError al instalar licencias: {result}")
-    
-    # Set port
-    run_command('cscript ospp.vbs /setprt:1688')
-    
-    # Uninstall any existing key
-    run_command('cscript ospp.vbs /unpkey:6MWKP >nul')
-    
-    # Install product key
-    print("\nInstalando clave de producto...")
-    result = run_command('cscript ospp.vbs /inpkey:NMMKJ-6RK4F-KMJVX-8D9MJ-6MWKP')
-    if "Error" in result:
-        print(f"\nError al instalar clave de producto: {result}")
-        input("\nPresione Enter para continuar...")
-        return False
-
-    # Paso 3: Iniciar servidor KMS local
-    kms_server = start_kms_server_local()
-    if not kms_server:
-        print("Fallo al iniciar servidor KMS local")
-        input("\nPresione Enter para continuar...")
-        return False
-
+def activate_office_2019_vl():
+    """
+    Función para activar Office 2019 Volume License usando un servidor KMS.
+    Realiza operaciones similares a los comandos batch proporcionados.
+    """
     try:
-        # Paso 4: Configurar KMS a 127.0.0.1
-        print("\nConfigurando servidor KMS local (127.0.0.1:1688)...")
-        skms_result = run_command('cscript ospp.vbs /sethst:127.0.0.1')
-        if "Error" in skms_result:
-            print(f"Error al configurar KMS: {skms_result}")
+        # Posibles rutas de instalación de Office
+        office_paths = [
+            os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Microsoft Office", "Office16"),
+            os.path.join(os.environ.get("ProgramFiles", ""), "Microsoft Office", "Office16"),
+            os.path.join(os.environ.get("ProgramFiles(x64)", ""), "Microsoft Office", "Office16")
+        ]
 
-        # Paso 5: Forzar activación
-        print("\nActivando Office... (puede tardar unos segundos)")
-        activation_result = run_command('cscript ospp.vbs /act')
-        print(activation_result if activation_result else "Activación completada (sin mensaje de error)")
+        # Buscar la ruta válida de Office
+        valid_path = None
+        for path in office_paths:
+            if os.path.exists(path) and os.path.isdir(path):
+                valid_path = path
+                break
 
-        # Paso 6: Verificar estado
-        print("\nEstado de activación:")
-        print(run_command('cscript ospp.vbs /dstatus'))
-        input("\nPresione Enter para continuar...")
+        if not valid_path:
+            raise FileNotFoundError("No se pudo encontrar la ruta de instalación de Office")
+
+        # Cambiar al directorio de Office
+        os.chdir(valid_path)
+
+        # Instalar licencias VL
+        licenses_path = os.path.join(valid_path, "..", "root", "Licenses16")
+        if os.path.exists(licenses_path):
+            for file in os.listdir(licenses_path):
+                if file.startswith("ProPlus2019VL") and file.endswith(".xrm-ms"):
+                    license_file = os.path.join(licenses_path, file)
+                    subprocess.run(["cscript", "ospp.vbs", "/inslic:" + license_file], check=True)
+
+        # Configurar puerto KMS
+        subprocess.run(["cscript", "ospp.vbs", "/setprt:1688"], check=True)
+        
+        # Eliminar clave anterior (silenciosamente)
+        subprocess.run(["cscript", "ospp.vbs", "/unpkey:6MWKP"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Instalar nueva clave
+        subprocess.run(["cscript", "ospp.vbs", "/inpkey:NMMKJ-6RK4F-KMJVX-8D9MJ-6MWKP"], check=True)
+        
+        # Configurar servidor KMS
+        subprocess.run(["cscript", "ospp.vbs", "/sethst:kms8.msguides.com"], check=True)
+        
+        # Intentar activación
+        subprocess.run(["cscript", "ospp.vbs", "/act"], check=True)
+        
+        print("Proceso de activación completado.")
         return True
-
-    finally:
-        if kms_server:
-            kms_server.terminate()
-################################################################################################################################################################
-def activate_office_with_public_kms():
-    """Proceso de activación de Office con servidores públicos KMS"""
-    print("\nUsando servidores KMS públicos para activar Office")
     
-    # Try different Office installation paths
-    paths = [
-        r"%ProgramFiles(x86)%\Microsoft Office\Office16",
-        r"%ProgramFiles%\Microsoft Office\Office16",
-        r"%ProgramFiles(x64)%\Microsoft Office\Office16"
-    ]
-    
-    office_path_found = False
-    for path in paths:
-        try:
-            os.chdir(os.path.expandvars(path))
-            office_path_found = True
-            break
-        except FileNotFoundError:
-            continue
-    
-    if not office_path_found:
-        print("Error: No se pudo encontrar la instalación de Office")
-        input("\nPresione Enter para continuar...")
+    except subprocess.CalledProcessError as e:
+        print(f"Error durante la ejecución del comando: {e}")
         return False
-
-    # Install license files
-    print("\nInstalando licencias...")
-    result = run_command('for /f %x in (\'dir /b ..\\root\\Licenses16\\ProPlus2019VL*.xrm-ms\') do cscript ospp.vbs /inslic:"..\\root\\Licenses16\\%x"')
-    if "Error" in result:
-        print(f"\nError al instalar licencias: {result}")
-    
-    # Set port
-    run_command('cscript ospp.vbs /setprt:1688')
-    
-    # Uninstall any existing key
-    run_command('cscript ospp.vbs /unpkey:6MWKP >nul')
-    
-    # Install product key
-    print("\nInstalando clave de producto...")
-    result = run_command('cscript ospp.vbs /inpkey:NMMKJ-6RK4F-KMJVX-8D9MJ-6MWKP')
-    if "Error" in result:
-        print(f"\nError al instalar clave de producto: {result}")
-        input("\nPresione Enter para continuar...")
+    except Exception as e:
+        print(f"Error inesperado: {e}")
         return False
-    
-    # Configure KMS server
-    print("\nConfigurando servidor KMS...")
-    servers = configurar_servidores_kms_publicos()
-    for server in servers:
-        result = run_command(f'cscript ospp.vbs /sethst:{server}')
-        if not "Error" in result:
-            print(f"Conectado a: {server}")
-            break
-        print(f"Fallo con {server}")
-    else:
-        print("Todos los servidores fallaron")
-        input("\nPresione Enter para continuar...")
-        return False
-    
-    # Activate
-    print("\nActivando Office...")
-    result = run_command('cscript ospp.vbs /act')
-    print(result if result else "Activación completada (sin mensaje)")
-
-    # Verify activation
-    print("\nEstado de activación:")
-    print(run_command('cscript ospp.vbs /dstatus'))
-    input("\nPresione Enter para continuar...")
-    return True
-################################################################################################################################################################
-def check_office_activation_status():
-    """Muestra el estado de activación de Office"""
-    print("\nVerificando estado de activación de Office...")
-    
-    # Buscar la instalación de Office
-    paths = [
-        r"%ProgramFiles(x86)%\Microsoft Office\Office16",
-        r"%ProgramFiles%\Microsoft Office\Office16",
-        r"%ProgramFiles(x64)%\Microsoft Office\Office16"
-    ]
-    
-    office_path_found = False
-    for path in paths:
-        try:
-            os.chdir(os.path.expandvars(path))
-            office_path_found = True
-            break
-        except FileNotFoundError:
-            continue
-    
-    if not office_path_found:
-        print("Error: No se pudo encontrar la instalación de Office")
-        input("\nPresione Enter para continuar...")
-        return False
-
-    # Comandos para verificar el estado
-    commands = [
-        'cscript ospp.vbs /dstatus',      # Estado detallado de activación
-        'cscript ospp.vbs /dhistoryacterr' # Historial de errores de activación
-    ]
-    
-    for cmd in commands:
-        print("\n" + "="*50)
-        print(f"Ejecutando: {cmd}")
-        result = run_command(cmd)
-        print(result if result else "Sin información adicional")
-    
-    input("\nPresione Enter para continuar...")
-    return True
-
 ###########
 # WINDOWS #
 ###########
@@ -1275,38 +994,6 @@ def activate_windows():
         else:
             print("\n¡Opción no válida! Por favor seleccione 1-9.")
 ################################################################################################################################################################
-def activate_office():
-    """Menú de activación principal"""
-    os.system('cls')
-    print("=== Activación de Office ===")
-    print("1. Usar servidor KMS local (recomendado)")
-    print("2. Usar servidores KMS públicos")
-    print("3. Verificar la activacion de office")
-    print("4. Eliminar vlmcsd (limpieza)")
-    opcion = input("\nSeleccione método: ").strip()
-
-    if opcion == "1":
-        activate_office_with_local_kms()
-    elif opcion == "2":
-        activate_office_with_public_kms()
-    elif opcion == "3":
-        check_office_activation_status()
-    elif opcion == "4":
-        remove_vlmcsd()
-    else: 
-        print("Opcion incorecta")
-        input("\nPresione Enter para continuar...")
-################################################################################################################################################################
-def menu_activar_WindowsOOffice():
-    print("""
-1. Activar Windows
-2. Activar Office""")    
-    opcion = input("\nSeleccione opción: ").strip()
-    if opcion == "1":
-        activate_windows()
-    elif opcion == "2":
-        activate_office()
-################################################################################################################################################################
 def menu_reparar_Windwos():
     print("""
 1. Verificar y reparar archivos del sistema
@@ -1415,17 +1102,25 @@ def main():
     while True:
         os.system('cls')
         print("""
-1. Activar Windows o Office
-2. Herramientas
-3. Informacion del sistema
-4. Acerca de
-5. Salir""")
+1. Windows
+2. Office
+3. Herramientas
+4. Informacion del sistema
+5. Acerca de
+6. Salir""")
 
         opcion = input("\nSeleccione opción: ").strip()
 
         if opcion == "1":
-            menu_activar_WindowsOOffice()
+            activate_windows()
         elif opcion == "2":
+            print("""
+1. Activar Office
+""")        
+            opcion = input("\nSeleccione opción: ").strip()
+            if opcion == "1":
+                activate_office_2019_vl()
+        elif opcion == "3":
             print("""
 1. Reparar Windows
 2. Otras funciones
@@ -1469,12 +1164,12 @@ def main():
                     if opcion == "1" or opcion == "2":
                         Cambiar(opcion)
                     input("\nPresione Enter para continuar...")
-        elif opcion == "3":
+        elif opcion == "4":
                 obtener_informacion_pc()
                 get_windows_info()
                 input("\nPresione Enter para continuar...")
 
-        elif opcion == "4":
+        elif opcion == "5":
             print("Acerca de...")
             print("1. KMS")
             print("2. Aplicacion")
@@ -1505,7 +1200,7 @@ tercer numero <- Parche	Corrección de bugs sin añadir funcionalidades.
 cuarto numero <- Build	Número de compilación
 """)
             input("\nPresione Enter para continuar...")
-        elif opcion == "5":
+        elif opcion == "6":
             break
         else:
             print("Opción no válida")

@@ -33,7 +33,7 @@ DEntro de dicho archivo debe estar estructurado de la siguiente manera
 def obtenerKeys():
     return {
         # Windows 10/11 Keys
-        "Core": "xxxx-xxxx-xxxx-xxxx-xxxx",
+        "Core": ["xxxx-xxxx-xxxx-xxxx-xxxx","xxxx-xxxx-xxxx-xxxx-xxxx"],
         "CoreN": "xxxx-xxxx-xxxx-xxxx-xxxx",
         "CoreSingleLanguage": "xxxx-xxxx-xxxx-xxxx-xxxx",
 '''

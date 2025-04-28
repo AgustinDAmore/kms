@@ -1,2 +1,3 @@
 pip install wmi
 pip install psutil
+pip install requests
